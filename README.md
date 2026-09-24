@@ -74,6 +74,15 @@ bitbake core-image-connectivity
 | P4 | `CarPlayStubAdapter` (MFI_REQUIRED) + exclusive allowlist policy |
 | P5 | `meta-connectivity` recipe, systemd unit, udev rules, image, kernel cfg |
 
+## Học / đọc tài liệu
+
+| Doc | Nội dung |
+|-----|----------|
+| [docs/READING_ROADMAP.md](docs/READING_ROADMAP.md) | Lộ trình đọc (udev → code → AA/CarPlay → Yocto) |
+| [docs/FUNCTIONS.md](docs/FUNCTIONS.md) | Giải thích từng function/API |
+| [docs/SEQUENCES.md](docs/SEQUENCES.md) | Sequence diagrams các luồng chính |
+| [docs/LEARNING.md](docs/LEARNING.md) | Mục lục học + lab nhanh |
+
 ## Hardware notes
 
 - Use USB-A host ports on RPi4 (not gadget mode).

@@ -1,30 +1,23 @@
 # Learning path — USB Manager / Connectivity SC
 
-## 1. USB Host hotplug
+Tài liệu học đã được tách thành 3 file chính — **bắt đầu từ đây**:
 
-- Run `udevadm monitor --subsystem-match=usb --property` while plugging a phone.
-- Run `./build/usb-udev-lab` and compare VID/PID + `type=` output.
-- Read `src/hotplug/UdevMonitor.cpp` and `src/classify/DeviceClassifier.cpp`.
+| File | Nội dung |
+|------|----------|
+| **[READING_ROADMAP.md](READING_ROADMAP.md)** | Lộ trình đọc tài liệu ngoài + thứ tự đọc code (theo tuần/ngày) |
+| **[FUNCTIONS.md](FUNCTIONS.md)** | Giải thích từng class/function trong `usb-manager` |
+| **[SEQUENCES.md](SEQUENCES.md)** | Sequence diagrams: boot, AA plug-in, CarPlay stub, unplug, D-Bus, exclusive |
+| [AASDK_INTEGRATION.md](AASDK_INTEGRATION.md) | Cách thay `DemoAasdkSession` bằng AASDK/OpenAuto thật |
 
-## 2. Transports
+## Lab nhanh
 
-- AOAP: `src/aoap/TransportProber.cpp` (`GET_PROTOCOL`).
-- Network: look for `cdc_ncm` / `rndis_host` under `/sys/class/net/*/device/driver`.
-- Optional: `usb_modeswitch` when a phone enumerates as storage first.
+```bash
+./scripts/build.sh
+./build/usb-udev-lab              # P0: plug/unplug + classify
+./build/usb-manager-selftest      # classifier + exclusive policy
+./build/usb-manager --debug       # full daemon
+```
 
-## 3. Session + policy
+## Thứ tự đọc code tối thiểu
 
-- State machine: `src/session/SessionOrchestrator.cpp`
-- Exclusive AA/CarPlay: `src/policy/ConnectionPolicy.cpp`
-- CarPlay stub always returns `MFI_REQUIRED` (production needs Apple MFi + licensed stack).
-
-## 4. IPC
-
-- D-Bus interface in `src/ipc/UsbDbusService.cpp`
-- From a desktop session: `busctl --user introspect org.example.connectivity /org/example/connectivity/usb`
-
-## 5. Yocto
-
-- Layer: `meta-connectivity`
-- Image: `core-image-connectivity`
-- Kernel fragment: `connectivity-usb.cfg`
+`Types.hpp` → `UdevMonitor` → `DeviceClassifier` → `DeviceRegistry` → `ConnectionPolicy` → adapters → `SessionOrchestrator` → `UsbDbusService` → `main.cpp`
