@@ -1,0 +1,13 @@
+# Sample snippets for Yocto build/conf (do not copy blindly — merge carefully).
+
+# bblayers.conf — add:
+#   /home/tpn_dev/mcu-dev/meta-connectivity
+
+# local.conf — typical RPi4 Host prototype:
+# MACHINE ?= "raspberrypi4-64"
+# DISTRO_FEATURES:append = " systemd"
+# VIRTUAL-RUNTIME_init_manager = "systemd"
+# IMAGE_INSTALL:append = " usb-manager usbutils"
+#
+# Or build the dedicated image:
+#   bitbake core-image-connectivity

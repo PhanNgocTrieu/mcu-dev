@@ -1,0 +1,8 @@
+# Tag phone-like USB devices for Connectivity SC (daemon still uses libudev).
+ACTION=="add", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="05ac", ENV{CONNECTIVITY_ROLE}="phone"
+ACTION=="add", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="18d1", ENV{CONNECTIVITY_ROLE}="phone"
+ACTION=="add", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="04e8", ENV{CONNECTIVITY_ROLE}="phone"
+ACTION=="add", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="05c6", ENV{CONNECTIVITY_ROLE}="phone"
+ACTION=="add", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="2717", ENV{CONNECTIVITY_ROLE}="phone"
+ACTION=="add", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="22b8", ENV{CONNECTIVITY_ROLE}="phone"
+ACTION=="add", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="12d1", ENV{CONNECTIVITY_ROLE}="phone"

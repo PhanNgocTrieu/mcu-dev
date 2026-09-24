@@ -1,0 +1,16 @@
+[Unit]
+Description=Connectivity SC USB Manager (Host)
+Documentation=file:///usr/share/doc/usb-manager/README.md
+After=systemd-udevd.service dbus.service
+Wants=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/usb-manager
+Restart=on-failure
+RestartSec=2
+# Allow USB device access; tighten with group plugdev in production images.
+SupplementaryGroups=plugdev
+
+[Install]
+WantedBy=multi-user.target
