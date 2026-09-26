@@ -64,14 +64,32 @@ Modes: `android_auto` | `carplay` | `storage`
 
 ## Yocto (RPi4)
 
+The Docker environment is Ubuntu 22.04 with the Yocto 5.0.20 (scarthgap) host packages. The first start clones Poky, meta-openembedded, and meta-raspberrypi at the revisions in `docker/layers.lock`, then creates `yocto/build` for `MACHINE = "raspberrypi4-64"`. Source edits under `usb-manager/` are picked up through `externalsrc`.
+
 ```bash
-# In your build/conf/bblayers.conf add:
-#   /path/to/mcu-dev/meta-connectivity
-# MACHINE = "raspberrypi4-64"
+./scripts/yocto.sh                 # shell with bitbake on PATH
 bitbake core-image-connectivity
 ```
 
-`usb-manager` is built via `externalsrc` from `mcu-dev/usb-manager`.
+Non-interactive:
+
+```bash
+./scripts/yocto.sh bitbake core-image-connectivity
+```
+
+Flash the SD card after `lsblk` confirms the device. `YES` is required on purpose. On WSL, writing the card from Windows (Raspberry Pi Imager, custom image) is the reliable option; `flash-sd` needs a whole-disk node inside the container:
+
+```bash
+docker compose run --rm --privileged yocto flash-sd /dev/sdX YES
+```
+
+Image:
+
+```
+yocto/build/tmp/deploy/images/raspberrypi4-64/core-image-connectivity-raspberrypi4-64.rootfs.wic.bz2
+```
+
+First boot: `ssh root@<board-ip>` with an empty password (prototype only). Serial console is GPIO 14/15 at 115200 (`ENABLE_UART`). Use a USB-A host port and a 5V/3A supply.
 
 ## Phase mapping
 

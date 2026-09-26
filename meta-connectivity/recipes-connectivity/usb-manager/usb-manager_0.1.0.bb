@@ -13,7 +13,14 @@ EXTERNALSRC_BUILD = "${WORKDIR}/usb-manager-build"
 DEPENDS = "udev libusb1 systemd"
 RDEPENDS:${PN} += "udev libusb1 usbutils"
 
-inherit cmake pkgconfig systemd
+inherit cmake pkgconfig systemd useradd features_check
+
+REQUIRED_DISTRO_FEATURES = "systemd"
+
+# The unit lists SupplementaryGroups=plugdev. The group has to exist or
+# systemd refuses to start the daemon after the board boots.
+USERADD_PACKAGES = "${PN}"
+GROUPADD_PARAM:${PN} = "-r plugdev"
 
 SYSTEMD_SERVICE:${PN} = "usb-manager.service"
 SYSTEMD_AUTO_ENABLE:${PN} = "enable"

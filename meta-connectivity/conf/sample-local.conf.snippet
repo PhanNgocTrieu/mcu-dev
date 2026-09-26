@@ -1,13 +1,18 @@
-# Sample snippets for Yocto build/conf (do not copy blindly — merge carefully).
+# Sample snippets for Yocto build/conf. The Docker entrypoint writes a
+# complete local.conf and bblayers.conf into yocto/build/conf on first start.
+# Merge these only if you create a build directory by hand.
 
-# bblayers.conf — add:
-#   /home/tpn_dev/mcu-dev/meta-connectivity
+# bblayers.conf — add the layer beside Poky and meta-raspberrypi (scarthgap):
+#   /path/to/mcu-dev/meta-connectivity
 
-# local.conf — typical RPi4 Host prototype:
+# local.conf:
 # MACHINE ?= "raspberrypi4-64"
-# DISTRO_FEATURES:append = " systemd"
-# VIRTUAL-RUNTIME_init_manager = "systemd"
-# IMAGE_INSTALL:append = " usb-manager usbutils"
+# DISTRO ?= "poky"
+# INIT_MANAGER = "systemd"
+# ENABLE_UART = "1"
+# LICENSE_FLAGS_ACCEPTED += "synaptics-killswitch"
+# EXTRA_IMAGE_FEATURES ?= "debug-tweaks ssh-server-openssh"
 #
-# Or build the dedicated image:
+# Image:
 #   bitbake core-image-connectivity
+#   yocto/build/tmp/deploy/images/raspberrypi4-64/core-image-connectivity-raspberrypi4-64.rootfs.wic.bz2

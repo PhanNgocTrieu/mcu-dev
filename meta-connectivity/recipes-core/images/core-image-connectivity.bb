@@ -6,10 +6,15 @@ DESCRIPTION = "Minimal image additions for USB Host projection prototype on rasp
 
 require recipes-core/images/core-image-base.bb
 
-IMAGE_FEATURES:append = " ssh-server-openssh"
+# Prototype board login: ssh root@<ip> with an empty password.
+# debug-tweaks still enables empty-root-password, allow-empty-password,
+# and allow-root-login on scarthgap.
+IMAGE_FEATURES:append = " ssh-server-openssh debug-tweaks"
 
 IMAGE_INSTALL:append = " \
     usb-manager \
     usbutils \
     libusb1 \
+    dbus \
+    kernel-modules \
 "

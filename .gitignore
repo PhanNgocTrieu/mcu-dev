@@ -30,6 +30,9 @@ Testing/
 *.log
 *.pid
 
+# Yocto tree created by the Docker environment (poky, layers, downloads, sstate)
+yocto/
+
 # Local tooling and editor files
 .cache/
 .vscode/
