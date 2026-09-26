@@ -80,7 +80,7 @@ flowchart TB
   BtWifi -.->|Wireless_AA_CP_later| Policy
 ```
 
-
+![Connectivity SC trên RPi4 Host](docs/diagrams/connectivity-sc.png)
 
 **Ranh giới trách nhiệm**
 
@@ -142,7 +142,7 @@ stateDiagram-v2
   Ignored --> Idle: remove
 ```
 
-
+![Vòng đời thiết bị USB](docs/diagrams/device-lifecycle.png)
 
 **Sự kiện chính**
 

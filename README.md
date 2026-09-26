@@ -5,7 +5,8 @@ C++ daemon that manages USB Host hotplug, device classification, Android Auto de
 ## Layout
 
 ```
-usb-manager/           # Daemon sources (CMake)
+usb-manager/           # Daemon C++ (CMake)
+usb-manager-c/         # Daemon C; D-Bus via sdbus-c++ only
 meta-connectivity/     # Yocto layer (recipe, image, kernel cfg)
 docs/                  # Learning notes + AASDK integration
 ```
@@ -39,6 +40,15 @@ ctest --test-dir build --output-on-failure
 
 # Daemon without D-Bus (if session bus missing)
 ./build/usb-manager --no-dbus --debug
+```
+
+## C build (`usb-manager-c/`)
+
+Same behavior, written in C. D-Bus uses **sdbus-c++** from `src/dbus_sdbuspp.cpp` (the only C++ file).
+
+```bash
+./scripts/build-c.sh
+./build-c/usb-manager-c --no-dbus --debug
 ```
 
 ## D-Bus API

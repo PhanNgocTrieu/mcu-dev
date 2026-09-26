@@ -1,6 +1,7 @@
 # Local dependency prefixes and build trees
 .deps/
 build/
+build-c/
 cmake-build-*/
 out/
 
