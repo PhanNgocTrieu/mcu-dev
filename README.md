@@ -111,6 +111,7 @@ First boot: `ssh root@<board-ip>` with an empty password (prototype only). Seria
 | [docs/SEQUENCES.md](docs/SEQUENCES.md) | Sequence diagrams các luồng chính |
 | [docs/LIBRARIES.md](docs/LIBRARIES.md) | libudev, libusb, sd-bus, sdbus-c++ (C và C++) |
 | [docs/LEARNING.md](docs/LEARNING.md) | Mục lục học + lab nhanh |
+| [docs/USB_TESTING.md](docs/USB_TESTING.md) | Test `connectivity-usb`: selftest trên máy dev, cắm thiết bị trên Pi 4 |
 
 ## Hardware notes
 
