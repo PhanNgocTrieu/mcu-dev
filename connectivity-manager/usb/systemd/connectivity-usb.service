@@ -1,0 +1,15 @@
+[Unit]
+Description=Connectivity manager USB host
+After=systemd-udevd.service dbus.service
+Wants=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/connectivity-usb
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=connectivity/usb
+SupplementaryGroups=plugdev
+
+[Install]
+WantedBy=multi-user.target

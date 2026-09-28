@@ -6,8 +6,8 @@
 #define USB_MAX_ALLOW 16
 
 typedef struct {
-  int allowed;
-  char reason[USB_ERR_LEN];
+    int allowed;
+    char reason[USB_ERR_LEN];
 } usb_policy_decision_t;
 
 typedef struct usb_policy usb_policy_t;

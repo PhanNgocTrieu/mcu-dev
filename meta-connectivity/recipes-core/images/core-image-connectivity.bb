@@ -1,4 +1,4 @@
-SUMMARY = "RPi4 Connectivity SC prototype image with usb-manager"
+SUMMARY = "RPi4 Connectivity SC prototype image with connectivity-usb"
 DESCRIPTION = "Minimal image additions for USB Host projection prototype on raspberrypi4-64."
 
 # bitbake core-image-connectivity
@@ -12,7 +12,7 @@ require recipes-core/images/core-image-base.bb
 IMAGE_FEATURES:append = " ssh-server-openssh debug-tweaks"
 
 IMAGE_INSTALL:append = " \
-    usb-manager \
+    connectivity-usb \
     usbutils \
     libusb1 \
     dbus \
