@@ -109,6 +109,7 @@ First boot: `ssh root@<board-ip>` with an empty password (prototype only). Seria
 | [docs/READING_ROADMAP.md](docs/READING_ROADMAP.md) | Lộ trình đọc (udev → code → AA/CarPlay → Yocto) |
 | [docs/FUNCTIONS.md](docs/FUNCTIONS.md) | Giải thích từng function/API |
 | [docs/SEQUENCES.md](docs/SEQUENCES.md) | Sequence diagrams các luồng chính |
+| [docs/LIBRARIES.md](docs/LIBRARIES.md) | libudev, libusb, sd-bus, sdbus-c++ (C và C++) |
 | [docs/LEARNING.md](docs/LEARNING.md) | Mục lục học + lab nhanh |
 
 ## Hardware notes

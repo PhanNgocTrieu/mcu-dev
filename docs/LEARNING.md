@@ -7,6 +7,7 @@ Tài liệu học đã được tách thành 3 file chính — **bắt đầu t�
 | **[READING_ROADMAP.md](READING_ROADMAP.md)** | Lộ trình đọc tài liệu ngoài + thứ tự đọc code (theo tuần/ngày) |
 | **[FUNCTIONS.md](FUNCTIONS.md)** | Giải thích từng class/function trong `usb-manager` |
 | **[SEQUENCES.md](SEQUENCES.md)** | Sequence diagrams: boot, AA plug-in, CarPlay stub, unplug, D-Bus, exclusive |
+| **[LIBRARIES.md](LIBRARIES.md)** | libudev, libusb, sd-bus, sdbus-c++ — function dùng trong C và C++ |
 | [AASDK_INTEGRATION.md](AASDK_INTEGRATION.md) | Cách thay `DemoAasdkSession` bằng AASDK/OpenAuto thật |
 
 ## Lab nhanh
