@@ -1,0 +1,11 @@
+[Unit]
+Description=USB module (enumeration, AOA, AirPlay transport)
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/usb-module --no-aoa
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
