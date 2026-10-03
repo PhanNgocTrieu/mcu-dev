@@ -1,0 +1,59 @@
+# Host / CMake
+/build/
+**/build/
+!rasp4/build-raspi4/
+!rasp4/build-demo/
+rasp4/build-demo/build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+*.o
+*.a
+*.so
+*.so.*
+*.out
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Host-only SDL / font headers extracted for lab builds
+/third_party/sdl2/
+/third_party/stb_truetype.h
+
+# Optional large vendor trees (provide locally or via submodule)
+/third_party/aasdk/
+/third_party/openauto/
+
+# Secrets / MFi material — never commit
+**/mfi-certs/
+**/*secret*
+**/*.pem
+**/*.p12
+**/*.key
+
+# Yocto (rasp4/build-raspi4 and any meter-pf build)
+rasp4/build-raspi4/upstream/
+rasp4/build-raspi4/downloads/
+rasp4/build-raspi4/sstate-cache/
+rasp4/build-raspi4/build/
+meter-pf/**/downloads/
+meter-pf/**/sstate-cache/
+meter-pf/**/build/
+meter-pf/**/poky/
+meter-pf/**/meta-raspberrypi/
+meter-pf/**/meta-openembedded/
+
+# BitBake / externalsrc residue
+oe-logs/
+oe-workdir/
+*.pyc
+__pycache__/
+
+# Runtime sockets / smoke logs
+/tmp/hupi-*/
+*.sock

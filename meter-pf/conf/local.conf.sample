@@ -1,0 +1,10 @@
+# EVB / meter-pf sample — copy into the EVB build/conf/local.conf.
+# Sources are identical to rasp4; only MACHINE and media flags differ.
+
+# MACHINE ?= "your-evb-machine"
+INIT_MANAGER = "systemd"
+DISTRO_FEATURES:append = " wayland opengl pam"
+
+# Real media stacks on the main board image:
+EXTRA_OECMAKE:pn-libhu-aa = "-DHUPI_WITH_AASDK=ON"
+EXTRA_OECMAKE:pn-libhu-carplay = "-DHUPI_WITH_MFI=ON"

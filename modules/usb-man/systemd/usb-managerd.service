@@ -1,0 +1,12 @@
+[Unit]
+Description=HUPI USB manager (AOA, CarPlay NCM, one session, stream)
+After=usb-driverd.service
+Requires=usb-driverd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/usb-managerd --runtime /run/hupi
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

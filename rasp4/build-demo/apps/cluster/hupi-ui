@@ -1,0 +1,6 @@
+#!/bin/sh
+# Started by Weston on the Raspberry Pi. Both windows share the Wayland session.
+export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland}"
+hupi-cluster &
+usb-demo &
+wait

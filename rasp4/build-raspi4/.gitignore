@@ -1,0 +1,5 @@
+upstream/
+downloads/
+sstate-cache/
+build/
+*.log

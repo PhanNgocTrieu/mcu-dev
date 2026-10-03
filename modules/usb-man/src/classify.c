@@ -1,0 +1,102 @@
+#include "usbman.h"
+
+#include "hupi_wire.h"
+
+#include <stdio.h>
+#include <string.h>
+
+const char *usbman_kind_str(usbman_kind_t kind)
+{
+    switch (kind) {
+    case USBMAN_KIND_ANDROID:
+        return "android";
+    case USBMAN_KIND_ANDROID_AOAP:
+        return "android-aoap";
+    case USBMAN_KIND_CARPLAY:
+        return "carplay";
+    case USBMAN_KIND_APPLE_WAIT:
+        return "apple-wait";
+    case USBMAN_KIND_APPLE_IPHETH:
+        return "apple-ipheth";
+    case USBMAN_KIND_STORAGE:
+        return "storage";
+    case USBMAN_KIND_HID:
+        return "hid";
+    default:
+        return "other";
+    }
+}
+
+usbman_kind_t usbman_classify(const usbman_dev_t *dev)
+{
+    if (!dev) {
+        return USBMAN_KIND_OTHER;
+    }
+    if (dev->accessory || (dev->vid == 0x18d1 && (dev->pid == 0x2d00 || dev->pid == 0x2d01))) {
+        return USBMAN_KIND_ANDROID_AOAP;
+    }
+    if (dev->apple || dev->vid == 0x05ac) {
+        if (dev->ipheth && !dev->ncm) {
+            return USBMAN_KIND_APPLE_IPHETH;
+        }
+        if (dev->ncm) {
+            return USBMAN_KIND_CARPLAY;
+        }
+        return USBMAN_KIND_APPLE_WAIT;
+    }
+    if (dev->adb || dev->vid == 0x18d1) {
+        return USBMAN_KIND_ANDROID;
+    }
+    if (dev->storage) {
+        return USBMAN_KIND_STORAGE;
+    }
+    if (dev->hid) {
+        return USBMAN_KIND_HID;
+    }
+    return USBMAN_KIND_OTHER;
+}
+
+static void take(const char *line, const char *key, char *dst, size_t n)
+{
+    char raw[192];
+    if (hupi_kv_get(line, key, raw, sizeof raw) != 0) {
+        dst[0] = '\0';
+        return;
+    }
+    hupi_unescape(raw, dst, n);
+}
+
+int usbman_parse_dev(const char *line, usbman_dev_t *dev)
+{
+    if (!line || strncmp(line, "dev ", 4) != 0 || !dev) {
+        return -1;
+    }
+    if (strncmp(line, "dev gone ", 9) == 0) {
+        return -1;
+    }
+    memset(dev, 0, sizeof *dev);
+    take(line, "id", dev->id, sizeof dev->id);
+    take(line, "serial", dev->serial, sizeof dev->serial);
+    take(line, "mfg", dev->mfg, sizeof dev->mfg);
+    take(line, "prod", dev->prod, sizeof dev->prod);
+    take(line, "ifaces", dev->ifaces, sizeof dev->ifaces);
+    take(line, "drivers", dev->drivers, sizeof dev->drivers);
+    take(line, "net", dev->net, sizeof dev->net);
+    take(line, "node", dev->node, sizeof dev->node);
+    if (dev->id[0] == '\0') {
+        return -1;
+    }
+    hupi_kv_get_uint(line, "vid", &dev->vid);
+    hupi_kv_get_uint(line, "pid", &dev->pid);
+    hupi_kv_get_int(line, "ncm", &dev->ncm);
+    hupi_kv_get_int(line, "ecm", &dev->ecm);
+    hupi_kv_get_int(line, "rndis", &dev->rndis);
+    hupi_kv_get_int(line, "ipheth", &dev->ipheth);
+    hupi_kv_get_int(line, "storage", &dev->storage);
+    hupi_kv_get_int(line, "hid", &dev->hid);
+    hupi_kv_get_int(line, "adb", &dev->adb);
+    hupi_kv_get_int(line, "accessory", &dev->accessory);
+    hupi_kv_get_int(line, "sim", &dev->sim);
+    hupi_kv_get_int(line, "apple", &dev->apple);
+    return 0;
+}

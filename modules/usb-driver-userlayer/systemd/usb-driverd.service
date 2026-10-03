@@ -1,0 +1,14 @@
+[Unit]
+Description=HUPI USB driver layer (plug, unplug, enumeration, usbfs lease)
+After=systemd-udevd.service
+Before=usb-managerd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/usb-driverd --runtime /run/hupi
+Restart=on-failure
+RuntimeDirectory=hupi
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target
