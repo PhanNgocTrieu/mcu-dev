@@ -6,8 +6,13 @@
  */
 #include "hu_carplay.h"
 
+#include "hupi_h264.h"
 #include "hupi_log.h"
 #include "hupi_wire.h"
+
+#ifndef HUPI_MEDIA_H264_STUB
+#define HUPI_MEDIA_H264_STUB 0
+#endif
 
 #include <arpa/inet.h>
 #include <net/if.h>
@@ -76,7 +81,13 @@ int hu_carplay_start(hu_carplay_session_t *s)
     /* Open IAP2 over the NCM link, complete MFi, then start media TCP. */
 #endif
     if (s->cb.on_status) {
-        s->cb.on_status("active", hu_carplay_has_mfi() ? "mfi" : "ncm-shim", s->cb.user);
+        const char *detail = "ncm-shim";
+        if (hu_carplay_has_mfi()) {
+            detail = "mfi";
+        } else if (HUPI_MEDIA_H264_STUB) {
+            detail = "h264-stub";
+        }
+        s->cb.on_status("active", detail, s->cb.user);
     }
     return 0;
 }
@@ -107,14 +118,16 @@ int hu_carplay_touch(hu_carplay_session_t *s, int x, int y, int down)
 }
 
 /*
- * Poll media CarPlay. Có MFi: đọc TCP/IAP2. Không: RGB xanh dương shim ~10 fps
- * (cùng layout header FRM1 với libhu-aa để cluster không phụ thuộc backend).
+ * Poll media CarPlay.
+ *  - HUPI_WITH_MFI hoặc HUPI_MEDIA_H264_STUB: forward AU H.264 hardcode (sau thay TCP/IAP2)
+ *  - Không: RGB xanh dương shim FRM1
  */
 void hu_carplay_poll(hu_carplay_session_t *s)
 {
     uint8_t frame[20 + HUPI_FRAME_W * HUPI_FRAME_H * 3];
     uint32_t now;
     uint32_t w = HUPI_FRAME_W, h = HUPI_FRAME_H, stride = w * 3;
+    int use_h264 = 0;
 
     if (!s || !s->running || !s->cb.on_video) {
         return;
@@ -125,6 +138,29 @@ void hu_carplay_poll(hu_carplay_session_t *s)
     }
     s->last_ms = now;
     s->tick++;
+
+#if HUPI_WITH_MFI
+    use_h264 = 1;
+    /* TODO(MFi): đọc H.264 từ media TCP trên NCM, pack bằng hupi_h264_pack_frame. */
+#elif HUPI_MEDIA_H264_STUB
+    use_h264 = 1;
+#endif
+
+    if (use_h264) {
+        uint8_t packet[20 + 512];
+        size_t au_len = 0;
+        const uint8_t *au = hupi_h264_stub_au(&au_len);
+        int n = hupi_h264_pack_frame(packet, sizeof packet, w, h, 1, au, au_len);
+        if (n < 0) {
+            return;
+        }
+        if ((s->tick % 10) == 0) {
+            HUPI_LOGI("carplay.video h264 stub frame=%u bytes=%d iface=%s", s->tick, n, s->iface);
+        }
+        s->cb.on_video(packet, (size_t)n, (uint64_t)now * 1000ull, 1, s->cb.user);
+        return;
+    }
+
     frame[0] = (uint8_t)HUPI_FRAME_MAGIC;
     frame[1] = (uint8_t)(HUPI_FRAME_MAGIC >> 8);
     frame[2] = (uint8_t)(HUPI_FRAME_MAGIC >> 16);
@@ -145,7 +181,7 @@ void hu_carplay_poll(hu_carplay_session_t *s)
             }
         }
         if ((s->tick % 10) == 0) {
-            HUPI_LOGT("carplay.video frame=%u iface=%s", s->tick, s->iface);
+            HUPI_LOGT("carplay.video rgb frame=%u iface=%s", s->tick, s->iface);
         }
         s->cb.on_video(frame, 20u + nbytes, (uint64_t)now * 1000ull, 0, s->cb.user);
     }

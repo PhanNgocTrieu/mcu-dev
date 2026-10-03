@@ -142,7 +142,8 @@ static int read_frame(const char *runtime)
     }
     close(fd);
     magic = (uint32_t)hdr[0] | ((uint32_t)hdr[1] << 8) | ((uint32_t)hdr[2] << 16) | ((uint32_t)hdr[3] << 24);
-    return magic == HUPI_FRAME_MAGIC ? 0 : -1;
+    /* Lab mặc định H.264 stub; RGB shim khi HUPI_MEDIA_H264_STUB=OFF. */
+    return (magic == HUPI_FRAME_MAGIC || magic == HUPI_H264_MAGIC) ? 0 : -1;
 }
 
 static void stop_daemons(void)

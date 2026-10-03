@@ -17,10 +17,11 @@ Tài liệu này ghi lại những gì **chưa có trong repo** hoặc **chưa b
 ## 2) Cần phát triển tiếp (code / Yocto)
 
 ### Media thật
-- [ ] `libhu-aa`: thay shim bằng session AASDK (AOAP bulk / messenger / video + input channel)
-- [ ] `libhu-carplay`: nối IAP2/MFi, TCP media trên NCM, forward H.264 thay RGB shim
+- [x] Wire H.264 (`magic H264`) + AU stub hardcode (`hupi_h264_*`) — xem [MEDIA.md](MEDIA.md)
+- [ ] `libhu-aa`: thay `hupi_h264_stub_au` bằng AU từ aasdk::messenger (AOAP bulk / video + input)
+- [ ] `libhu-carplay`: nối IAP2/MFi, TCP media trên NCM, forward AU thật thay stub
 - [ ] Recipe Yocto `aasdk`, `libiap2`, `libhu-mfi` + `EXTRA_OECMAKE:pn-libhu-aa/carplay=ON` trên `meter-pf`
-- [ ] Đưa frame H.264 sang `hu-graphics` (GStreamer / V4L2) thay vì chỉ demo SDL
+- [ ] Decode frame H.264 trong `hu-graphics` (GStreamer / V4L2); cluster hiện chỉ đếm AU
 
 ### Module còn thiếu so với sơ đồ HUPI
 - [ ] `hu-connectivity` (session manager tổng), `hu-touch`, `hu-graphics` tách process
@@ -44,15 +45,22 @@ EXTRA_OECMAKE:pn-libhu-aa = "-DHUPI_WITH_AASDK=ON"
 EXTRA_OECMAKE:pn-libhu-carplay = "-DHUPI_WITH_MFI=ON"
 ```
 
-Host / demo không cần hai cờ này; shim vẫn emit frame + log để test UI.
+Host / demo: mặc định `HUPI_MEDIA_H264_STUB=ON` (AU hardcode). Tắt: `-DHUPI_MEDIA_H264_STUB=OFF` → RGB shim.
 
-## 4) Kiểm tra log khi thiếu stack thật
+## 4) Kiểm tra log
+
+Không AASDK, stub ON:
 
 ```text
 media.start android ... aasdk=0
+media.status phase=active detail=h264-stub
+aa.video h264 stub frame=… bytes=…
+```
+
+Stub OFF (RGB):
+
+```text
 media.status phase=active detail=shim
-media.start carplay ... mfi=0
-media.status phase=active detail=ncm-shim
 ```
 
 Khi đã link đúng: `aasdk=1` / `detail=aasdk` và `mfi=1` / `detail=mfi`.

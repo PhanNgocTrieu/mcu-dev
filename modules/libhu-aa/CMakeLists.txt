@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 project(libhu-aa VERSION 1.0.0 LANGUAGES C CXX)
 
 option(HUPI_WITH_AASDK "Link the real f1xpl/aasdk stack" OFF)
+# Bật H.264 stub ngay cả khi chưa có AASDK — để lab nối pipeline decode/graphics.
+option(HUPI_MEDIA_H264_STUB "Emit hardcoded H.264 AUs from libhu-aa" ON)
 
 get_filename_component(MODULES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 if(NOT TARGET hupi_wire)
@@ -12,7 +14,9 @@ add_library(hu_aa STATIC src/hu_aa.c)
 target_include_directories(hu_aa PUBLIC include)
 target_link_libraries(hu_aa PUBLIC hupi_wire)
 target_compile_options(hu_aa PRIVATE -Wall -Wextra -Werror -Wno-format-truncation)
-target_compile_definitions(hu_aa PUBLIC HUPI_WITH_AASDK=$<BOOL:${HUPI_WITH_AASDK}>)
+target_compile_definitions(hu_aa PUBLIC
+    HUPI_WITH_AASDK=$<BOOL:${HUPI_WITH_AASDK}>
+    HUPI_MEDIA_H264_STUB=$<BOOL:${HUPI_MEDIA_H264_STUB}>)
 
 if(HUPI_WITH_AASDK)
     message(STATUS "libhu-aa: building against AASDK")

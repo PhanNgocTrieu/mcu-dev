@@ -8,15 +8,19 @@
  * Một message = một dòng kết thúc '\\n', field `key=value`.
  * Giá trị không phải token thuần → percent-encode; rỗng → "-".
  *
- * Frame video trên usb-stream.sock: header 20 byte (magic/w/h/stride/nbytes) + RGB.
+ * Frame video trên usb-stream.sock — header 20 byte + payload:
+ *   RGB  : magic=FRM1, stride=w*3, nbytes=stride*h, payload=RGB24
+ *   H.264: magic=H264, stride=0 (unused), nbytes=AU length, payload=Annex-B
  */
 
 #include <stddef.h>
 #include <stdint.h>
 
 #define HUPI_FRAME_MAGIC 0x314D5246u /* little-endian bytes: 'F''R''M''1' */
+#define HUPI_H264_MAGIC 0x34363248u  /* little-endian bytes: 'H''2''6''4' */
 #define HUPI_FRAME_W 640
 #define HUPI_FRAME_H 360
+#define HUPI_H264_AU_MAX 65536u      /* giới hạn AU stub / một lần gửi stream */
 
 #define HUPI_DRIVER_SOCK "usb-driver.sock"   /* dưới $HUPI_RUNTIME */
 #define HUPI_MANAGER_SOCK "usb-manager.sock"

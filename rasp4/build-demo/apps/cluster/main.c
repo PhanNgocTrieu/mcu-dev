@@ -35,12 +35,13 @@ static int g_stream = -1;
 static uint8_t g_acc[20 + HUPI_FRAME_W * HUPI_FRAME_H * 3];
 static size_t g_have;
 static SDL_Texture *g_frame;
+static int g_video_is_h264;
+static uint32_t g_h264_bytes;
+static uint32_t g_h264_frames;
 
 static void take_stream(SDL_Renderer *renderer, const char *runtime)
 {
     char path[256];
-    char line_unused[4];
-    (void)line_unused;
     if (g_stream < 0) {
         hupi_sock_path(path, sizeof path, runtime, HUPI_STREAM_SOCK);
         g_stream = hupi_connect_unix(path);
@@ -53,6 +54,7 @@ static void take_stream(SDL_Renderer *renderer, const char *runtime)
     while (g_have < sizeof g_acc) {
         ssize_t n = recv(g_stream, g_acc + g_have, sizeof g_acc - g_have, 0);
         uint32_t magic, stride, nbytes, fw, fh;
+        int is_h264;
         if (n == 0) {
             close(g_stream);
             g_stream = -1;
@@ -76,7 +78,8 @@ static void take_stream(SDL_Renderer *renderer, const char *runtime)
                  ((uint32_t)g_acc[15] << 24);
         nbytes = (uint32_t)g_acc[16] | ((uint32_t)g_acc[17] << 8) | ((uint32_t)g_acc[18] << 16) |
                  ((uint32_t)g_acc[19] << 24);
-        if (magic != HUPI_FRAME_MAGIC || fw != HUPI_FRAME_W || fh != HUPI_FRAME_H ||
+        is_h264 = (magic == HUPI_H264_MAGIC);
+        if ((!is_h264 && magic != HUPI_FRAME_MAGIC) || fw != HUPI_FRAME_W || fh != HUPI_FRAME_H ||
             nbytes > sizeof g_acc - 20) {
             memmove(g_acc, g_acc + 1, g_have - 1);
             g_have--;
@@ -85,12 +88,20 @@ static void take_stream(SDL_Renderer *renderer, const char *runtime)
         if (g_have < 20u + nbytes) {
             break;
         }
-        if (!g_frame) {
-            g_frame = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING,
-                                        (int)fw, (int)fh);
-        }
-        if (g_frame) {
-            SDL_UpdateTexture(g_frame, NULL, g_acc + 20, (int)stride);
+        if (is_h264) {
+            /* Chưa decode H.264 trong demo SDL — chỉ đếm AU để xác nhận pipeline. */
+            g_video_is_h264 = 1;
+            g_h264_bytes = nbytes;
+            g_h264_frames++;
+        } else {
+            g_video_is_h264 = 0;
+            if (!g_frame) {
+                g_frame = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING,
+                                            (int)fw, (int)fh);
+            }
+            if (g_frame) {
+                SDL_UpdateTexture(g_frame, NULL, g_acc + 20, (int)stride);
+            }
         }
         memmove(g_acc, g_acc + 20 + nbytes, g_have - 20 - nbytes);
         g_have -= 20u + nbytes;
@@ -235,10 +246,20 @@ int main(int argc, char **argv)
 
         if (strcmp(backend, "android") == 0) {
             accent = rgb(22, 130, 74);
-            snprintf(center_txt, sizeof center_txt, "Android Auto · AOA");
+            if (g_video_is_h264) {
+                snprintf(center_txt, sizeof center_txt, "Android Auto · H.264 stub (%u B · #%u)",
+                         g_h264_bytes, g_h264_frames);
+            } else {
+                snprintf(center_txt, sizeof center_txt, "Android Auto · AOA");
+            }
         } else if (strcmp(backend, "carplay") == 0) {
             accent = rgb(20, 96, 170);
-            snprintf(center_txt, sizeof center_txt, "CarPlay · CDC-NCM · IPv6");
+            if (g_video_is_h264) {
+                snprintf(center_txt, sizeof center_txt, "CarPlay · H.264 stub (%u B · #%u)",
+                         g_h264_bytes, g_h264_frames);
+            } else {
+                snprintf(center_txt, sizeof center_txt, "CarPlay · CDC-NCM · IPv6");
+            }
         } else {
             accent = rgb(71, 85, 105);
             snprintf(center_txt, sizeof center_txt, "Chưa có phiên USB");
@@ -269,12 +290,16 @@ int main(int argc, char **argv)
 
         card(renderer, proj.x - 8, 80, proj.w + 16, 624);
         fill(renderer, proj.x, proj.y, proj.w, proj.h, rgb(15, 23, 42));
-        if (g_frame && streaming) {
+        if (g_frame && streaming && !g_video_is_h264) {
             SDL_RenderCopy(renderer, g_frame, NULL, &proj);
+        } else if (streaming && g_video_is_h264) {
+            /* Placeholder khi nhận H.264 — decode thật sẽ do hu-graphics / GStreamer. */
+            fill(renderer, proj.x + 40, proj.y + 120, proj.w - 80, proj.h - 200, rgb(30, 41, 59));
         }
         hupi_label_set(&center, renderer, font, rgb(255, 255, 255), center_txt);
         hupi_label_draw(&center, renderer, proj.x + 24, proj.y + 16);
-        hupi_label_set(&badge, renderer, font, accent, streaming ? "STREAM" : "CHỜ");
+        hupi_label_set(&badge, renderer, font, accent,
+                       streaming ? (g_video_is_h264 ? "H264" : "STREAM") : "CHỜ");
         hupi_label_draw(&badge, renderer, proj.x + proj.w - badge.w - 24, proj.y + 16);
         hupi_label_set(&foot, renderer, font, rgb(51, 65, 85), foot_txt);
         hupi_label_draw(&foot, renderer, proj.x, 600);

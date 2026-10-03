@@ -69,19 +69,22 @@ static hu_carplay_session_t *g_cp;
 static uint8_t g_media_frame[20 + HUPI_FRAME_W * HUPI_FRAME_H * 3];
 static size_t g_media_len;
 static int g_media_ready;
+static int g_media_is_h264;
 
 /* Callback từ lib media: giữ frame mới nhất, consider_frame sẽ đẩy ra stream sock. */
 static void media_on_video(const uint8_t *data, size_t len, uint64_t pts_us, int is_h264, void *user)
 {
-    (void)pts_us;
-    (void)is_h264;
     (void)user;
     if (len > sizeof g_media_frame) {
+        HUPI_LOGW("media.video drop len=%zu (cap=%zu)", len, sizeof g_media_frame);
         return;
     }
     memcpy(g_media_frame, data, len);
     g_media_len = len;
+    g_media_is_h264 = is_h264 ? 1 : 0;
     g_media_ready = 1;
+    HUPI_LOGT("media.video pts_us=%llu is_h264=%d len=%zu",
+              (unsigned long long)pts_us, g_media_is_h264, len);
 }
 
 static void media_on_status(const char *phase, const char *detail, void *user)
@@ -103,6 +106,7 @@ static void media_stop(void)
         g_cp = NULL;
     }
     g_media_ready = 0;
+    g_media_is_h264 = 0;
 }
 
 /*
@@ -533,12 +537,16 @@ static void consider_frame(void)
         return;
     }
     if (g_media_ready) {
+        /* Forward nguyên packet (FRM1 RGB hoặc H264 Annex-B) xuống usb-stream.sock */
         memcpy(g_frame, g_media_frame, g_media_len);
         g_frame_len = g_media_len;
         g_media_ready = 0;
         g_frame_off = 0;
         g_frame_busy = 1; /* đánh dấu có dữ liệu chờ POLLOUT */
         g_last_frame_ms = now_ms();
+        if (g_media_is_h264) {
+            HUPI_LOGT("stream.queue h264 bytes=%zu", g_frame_len);
+        }
         return;
     }
     t = now_ms();
