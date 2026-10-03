@@ -1,3 +1,9 @@
+/**
+ * @file ctl.c
+ * @brief CLI hupi-ctl — gửi một lệnh tới usb-managerd hoặc usb-driverd rồi in reply.
+ *
+ * Ví dụ: hupi-ctl manager status | sim plug android | stream on
+ */
 #include "hupi_wire.h"
 
 #include <errno.h>

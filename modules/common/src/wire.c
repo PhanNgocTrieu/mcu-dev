@@ -1,3 +1,12 @@
+/**
+ * @file wire.c
+ * @brief Giao thức dòng chữ + tiện ích Unix socket dùng chung các daemon HUPI.
+ *
+ * Mỗi message = một dòng kết thúc bằng '\n', field dạng key=value.
+ * Giá trị đặc biệt/có khoảng trắng được percent-encode (%XX); chuỗi rỗng → "-".
+ *
+ * hupi_peer_t: buffer nhận từng phần; pull() tách từng dòng hoàn chỉnh.
+ */
 #include "hupi_wire.h"
 
 #include <ctype.h>
@@ -36,6 +45,7 @@ void hupi_sock_path(char *out, size_t n, const char *runtime, const char *name)
     snprintf(out, n, "%s/%s", runtime, name);
 }
 
+/* Tạo server Unix stream; unlink path cũ, chmod 0666 để demo/user khác connect được. */
 int hupi_listen_unix(const char *path)
 {
     int fd;
@@ -49,7 +59,7 @@ int hupi_listen_unix(const char *path)
     if (fd < 0) {
         return -1;
     }
-    unlink(path);
+    unlink(path); /* tránh EADDRINUSE từ lần chạy trước */
     memset(&addr, 0, sizeof addr);
     addr.sun_family = AF_UNIX;
     snprintf(addr.sun_path, sizeof addr.sun_path, "%s", path);
@@ -113,6 +123,11 @@ int hupi_send_line(int fd, const char *line)
     return 0;
 }
 
+/*
+ * Tách một dòng hoàn chỉnh từ buffer peer.
+ *  1 = có dòng (đã bỏ \\n, xử lý \\r), 0 = chưa đủ bytes, -1 = buffer đầy (framing lỗi).
+ * Phần còn lại sau '\\n' được memmove về đầu buffer.
+ */
 int hupi_peer_pull(hupi_peer_t *peer, char *line, size_t line_n)
 {
     char *nl;
@@ -122,25 +137,26 @@ int hupi_peer_pull(hupi_peer_t *peer, char *line, size_t line_n)
     nl = memchr(peer->buf, '\n', peer->len);
     if (!nl) {
         if (peer->len == sizeof peer->buf) {
-            return -1;
+            return -1; /* không còn chỗ mà chưa thấy \\n → discard peer */
         }
         return 0;
     }
     raw = (size_t)(nl - peer->buf);
     copy = raw;
     if (copy >= line_n) {
-        copy = line_n - 1;
+        copy = line_n - 1; /* cắt nếu dòng dài hơn buffer caller */
     }
     memcpy(line, peer->buf, copy);
     line[copy] = '\0';
     if (copy > 0 && line[copy - 1] == '\r') {
-        line[copy - 1] = '\0';
+        line[copy - 1] = '\0'; /* hỗ trợ CRLF */
     }
     memmove(peer->buf, nl + 1, peer->len - raw - 1);
     peer->len -= raw + 1;
     return 1;
 }
 
+/* Đọc thêm bytes vào peer->buf. 0 = ok/EAGAIN, -1 = đóng hoặc lỗi cứng. */
 int hupi_peer_recv(hupi_peer_t *peer)
 {
     ssize_t n;
@@ -150,7 +166,7 @@ int hupi_peer_recv(hupi_peer_t *peer)
     }
     n = recv(peer->fd, peer->buf + peer->len, sizeof peer->buf - peer->len, 0);
     if (n == 0) {
-        return -1;
+        return -1; /* peer đóng */
     }
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
@@ -162,6 +178,7 @@ int hupi_peer_recv(hupi_peer_t *peer)
     return 0;
 }
 
+/* Tìm key= đứng đầu dòng hoặc sau space (không match substring giữa token). */
 static const char *find_key(const char *line, const char *key)
 {
     size_t klen = strlen(key);
@@ -234,6 +251,10 @@ int hupi_kv_get_uint(const char *line, const char *key, unsigned *out)
     return 0;
 }
 
+/*
+ * Encode giá trị field wire: rỗng → "-"; ký tự lạ → %XX.
+ * Giữ nguyên alnum . _ - : / để path/id đọc được không cần decode mỗi lần.
+ */
 void hupi_escape(const char *in, char *out, size_t out_n)
 {
     static const char hex[] = "0123456789abcdef";

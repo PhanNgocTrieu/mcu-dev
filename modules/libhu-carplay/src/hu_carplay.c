@@ -1,6 +1,8 @@
 /**
  * @file hu_carplay.c
- * @brief CarPlay media path over NCM. MFi/IAP2 hook points for the EVB image.
+ * @brief Đường media CarPlay trên CDC-NCM. Hook MFi/IAP2 cho image EVB.
+ *
+ * Không có HUPI_WITH_MFI: shim RGB + log. Có MFi: mở IAP2 trên link NCM rồi media TCP.
  */
 #include "hu_carplay.h"
 
@@ -104,6 +106,10 @@ int hu_carplay_touch(hu_carplay_session_t *s, int x, int y, int down)
     return 0;
 }
 
+/*
+ * Poll media CarPlay. Có MFi: đọc TCP/IAP2. Không: RGB xanh dương shim ~10 fps
+ * (cùng layout header FRM1 với libhu-aa để cluster không phụ thuộc backend).
+ */
 void hu_carplay_poll(hu_carplay_session_t *s)
 {
     uint8_t frame[20 + HUPI_FRAME_W * HUPI_FRAME_H * 3];

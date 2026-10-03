@@ -1,3 +1,10 @@
+/**
+ * @file uevent.c
+ * @brief Lắng nghe netlink kobject uevent (subsystem usb) để biết cắm/rút.
+ *
+ * Không thay thế usbcore — chỉ nhận tín hiệu rồi để driverd quét lại sysfs.
+ * Payload là các field null-separated: ACTION= SUBSYSTEM= DEVPATH= PRODUCT=...
+ */
 #include "usbdrv.h"
 
 #include <errno.h>
@@ -89,6 +96,7 @@ int usbdrv_uevent_parse(const char *text, size_t len, usbdrv_uevent_t *out)
     return 0;
 }
 
+/* Bind netlink group 1 = kernel uevent multicast. */
 int usbdrv_uevent_open(void)
 {
     int fd;
@@ -108,6 +116,7 @@ int usbdrv_uevent_open(void)
     return fd;
 }
 
+/* 1 = parse được một event, 0 = EAGAIN/rỗng, -1 = lỗi. */
 int usbdrv_uevent_recv(int fd, usbdrv_uevent_t *out)
 {
     char buf[2048];

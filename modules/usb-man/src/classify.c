@@ -1,3 +1,12 @@
+/**
+ * @file classify.c
+ * @brief Phân loại thiết bị USB → kind dùng cho session policy.
+ *
+ * Ưu tiên (cao → thấp):
+ *   AOAP (đã accessory) → Apple/ipheth|NCM|wait → Android ADB → storage → HID
+ *
+ * Cũng parse dòng `dev ...` từ usb-driverd thành usbman_dev_t.
+ */
 #include "usbman.h"
 
 #include "hupi_wire.h"
@@ -32,20 +41,21 @@ usbman_kind_t usbman_classify(const usbman_dev_t *dev)
     if (!dev) {
         return USBMAN_KIND_OTHER;
     }
+    /* Google AOAP: pid 0x2d00 (AOA) / 0x2d01 (AOA + ADB) */
     if (dev->accessory || (dev->vid == 0x18d1 && (dev->pid == 0x2d00 || dev->pid == 0x2d01))) {
         return USBMAN_KIND_ANDROID_AOAP;
     }
     if (dev->apple || dev->vid == 0x05ac) {
         if (dev->ipheth && !dev->ncm) {
-            return USBMAN_KIND_APPLE_IPHETH;
+            return USBMAN_KIND_APPLE_IPHETH; /* bị policy từ chối */
         }
         if (dev->ncm) {
-            return USBMAN_KIND_CARPLAY;
+            return USBMAN_KIND_CARPLAY; /* đủ điều kiện projection */
         }
-        return USBMAN_KIND_APPLE_WAIT;
+        return USBMAN_KIND_APPLE_WAIT; /* chờ interface NCM */
     }
     if (dev->adb || dev->vid == 0x18d1) {
-        return USBMAN_KIND_ANDROID;
+        return USBMAN_KIND_ANDROID; /* cần AOA switch trước khi media */
     }
     if (dev->storage) {
         return USBMAN_KIND_STORAGE;
@@ -56,6 +66,7 @@ usbman_kind_t usbman_classify(const usbman_dev_t *dev)
     return USBMAN_KIND_OTHER;
 }
 
+/* Lấy key=value rồi unescape (đảo của hupi_escape phía driver). */
 static void take(const char *line, const char *key, char *dst, size_t n)
 {
     char raw[192];
@@ -66,6 +77,7 @@ static void take(const char *line, const char *key, char *dst, size_t n)
     hupi_unescape(raw, dst, n);
 }
 
+/* Parse "dev id=... vid=..." → struct. Bỏ qua "dev gone ...". */
 int usbman_parse_dev(const char *line, usbman_dev_t *dev)
 {
     if (!line || strncmp(line, "dev ", 4) != 0 || !dev) {

@@ -1,3 +1,9 @@
+/**
+ * @file usbfs.c
+ * @brief Wrapper mở /dev/bus/usb/... và gửi USB control transfer (USBDEVFS_CONTROL).
+ *
+ * Dùng cho AOA / vendor request từ usb-driverd thay vì để nhiều process cùng claim.
+ */
 #include "usbdrv.h"
 
 #include <fcntl.h>

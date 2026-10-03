@@ -1,3 +1,19 @@
+/**
+ * @file managerd.c
+ * @brief Daemon usb-managerd — chính sách session + media projection.
+ *
+ * Luồng tổng:
+ *   usb-driverd  --(dev events / ctrl replies)-->  usb-managerd
+ *        ^                                              |
+ *        |         claim/ctrl (AOA)                     | state / touch / stream
+ *        +----------------------------------------------+
+ *                                                       |
+ *                              demo apps / hupi-ctl <---+
+ *                              + video trên usb-stream.sock
+ *
+ * Chỉ một backend projection tại một thời điểm (Android Auto hoặc CarPlay).
+ * Media thật nằm ở libhu-aa / libhu-carplay; không có AASDK/MFi thì dùng shim RGB.
+ */
 #include "hupi_wire.h"
 #include "hupi_log.h"
 #include "hu_aa.h"
@@ -19,6 +35,7 @@
 #define MAX_PEER 8
 #define QMAX 24
 
+/* Một lệnh chờ gửi xuống usb-driverd; aoa=1 để xử lý lỗi/re-enum đặc biệt. */
 typedef struct {
     char line[USBMAN_LINE_LEN];
     int aoa;
@@ -26,15 +43,16 @@ typedef struct {
 
 static volatile sig_atomic_t g_stop;
 static usbman_session_t g_session;
-static hupi_peer_t g_driver;
-static hupi_peer_t g_peers[MAX_PEER];
-static int g_listen = -1;
-static int g_stream_listen = -1;
-static int g_stream_fd = -1;
+static hupi_peer_t g_driver;           /* kết nối tới usb-driverd */
+static hupi_peer_t g_peers[MAX_PEER];  /* client: panel, hupi-ctl, ... */
+static int g_listen = -1;              /* usb-manager.sock */
+static int g_stream_listen = -1;       /* usb-stream.sock */
+static int g_stream_fd = -1;           /* một consumer video tại một thời điểm */
 static char g_driver_path[128];
 static char g_manager_path[128];
 static char g_stream_path[128];
 
+/* Hàng đợi lệnh tuần tự gửi driver (claim/ctrl/sim...); g_waiting = đang chờ ok/err */
 static qitem g_q[QMAX];
 static int g_qh;
 static int g_qn;
@@ -46,13 +64,13 @@ static size_t g_frame_off;
 static int g_frame_busy;
 static uint32_t g_last_frame_ms;
 static int g_tick;
-static int g_tick;
 static hu_aa_session_t *g_aa;
 static hu_carplay_session_t *g_cp;
 static uint8_t g_media_frame[20 + HUPI_FRAME_W * HUPI_FRAME_H * 3];
 static size_t g_media_len;
 static int g_media_ready;
 
+/* Callback từ lib media: giữ frame mới nhất, consider_frame sẽ đẩy ra stream sock. */
 static void media_on_video(const uint8_t *data, size_t len, uint64_t pts_us, int is_h264, void *user)
 {
     (void)pts_us;
@@ -87,6 +105,13 @@ static void media_stop(void)
     g_media_ready = 0;
 }
 
+/*
+ * Đồng bộ media với session:
+ *  - chưa active / user tắt stream → destroy backend
+ *  - android active + chưa có g_aa → create/start libhu-aa
+ *  - carplay active + chưa có g_cp → create/start libhu-carplay (theo net iface)
+ * media_stop() trước khi create để chắc chỉ một backend sống.
+ */
 static void media_sync(void)
 {
     if (strcmp(g_session.phase, "active") != 0 || !g_session.streaming) {
@@ -136,6 +161,7 @@ static void put_u32(uint8_t *p, uint32_t v)
     p[3] = (uint8_t)(v >> 24);
 }
 
+/* Đưa lệnh vào hàng đợi gửi usb-driverd (tuần tự, một lệnh một lúc). */
 static int enqueue(const char *line, int aoa)
 {
     int slot;
@@ -158,6 +184,11 @@ static void pop_q(void)
     g_qn--;
 }
 
+/*
+ * Khi AOA fail: bỏ các bước AOA còn lại trong queue.
+ * Nếu đang chờ reply của lệnh đầu (g_waiting), giữ item đó để finish_driver_reply
+ * không lệch với reply sắp tới từ driver.
+ */
 static void drop_aoa_queued(void)
 {
     qitem kept[QMAX];
@@ -167,7 +198,7 @@ static void drop_aoa_queued(void)
     for (int i = 0; i < g_qn; i++) {
         qitem item = g_q[(g_qh + i) % QMAX];
         if (item.aoa && !(waiting_head && i == 0)) {
-            continue;
+            continue; /* drop AOA chưa gửi / không phải head đang chờ */
         }
         kept[n++] = item;
     }
@@ -176,6 +207,7 @@ static void drop_aoa_queued(void)
     memcpy(g_q, kept, sizeof kept);
 }
 
+/* Broadcast dòng `state ...` cho client đã sub + đồng bộ media backend. */
 static void publish(void)
 {
     char line[512];
@@ -194,6 +226,7 @@ static void publish(void)
     }
 }
 
+/* Chặn injection: chỉ cho phép tên iface [A-Za-z0-9_.] trước khi exec `ip`. */
 static int iface_ok(const char *iface)
 {
     if (!iface || !iface[0] || strcmp(iface, "-") == 0) {
@@ -208,6 +241,7 @@ static int iface_ok(const char *iface)
     return 1;
 }
 
+/* CarPlay cần iface NCM up trước khi media/IAP2 chạy — fork+exec `ip link set`. */
 static void link_up(const char *iface)
 {
     pid_t pid;
@@ -228,6 +262,7 @@ static void link_up(const char *iface)
     fprintf(stderr, "usb-managerd: ip link set %s up -> %d\n", iface, status);
 }
 
+/* Xếp chuỗi AOA (claim → GET_PROTOCOL → 6 string → START) vào queue driver. */
 static void start_aoa(const char *id)
 {
     char lines[9][USBMAN_LINE_LEN];
@@ -256,6 +291,7 @@ static void apply_action(usbman_action_t act, const usbman_dev_t *dev)
     }
 }
 
+/* Cache thiết bị còn cắm — dùng khi session về idle để promote máy projection khác. */
 #define KNOWN_MAX 8
 static usbman_dev_t g_known[KNOWN_MAX];
 static int g_nknown;
@@ -291,6 +327,7 @@ static int kind_is_projection(usbman_kind_t kind)
            kind == USBMAN_KIND_APPLE_IPHETH;
 }
 
+/* Sau khi thiết bị projection rút: nếu còn máy khác, nhận session lại. */
 static void promote_idle(void)
 {
     if (strcmp(g_session.phase, "idle") != 0) {
@@ -307,6 +344,7 @@ static void promote_idle(void)
     }
 }
 
+/* Xử lý sự kiện plug/unplug từ usb-driverd → cập nhật session + hành động. */
 static void on_driver_dev(const char *line)
 {
     char id[USBMAN_ID_LEN];
@@ -315,10 +353,10 @@ static void on_driver_dev(const char *line)
 
     if (strncmp(line, "dev gone ", 9) == 0) {
         if (hupi_kv_get(line, "id", id, sizeof id) == 0) {
-            usbman_on_gone(&g_session, id);
+            usbman_on_gone(&g_session, id); /* có thể → reenumerating hoặc idle */
             forget_dev(id);
             publish();
-            promote_idle();
+            promote_idle(); /* nếu idle, nhận máy projection còn lại */
         }
         return;
     }
@@ -326,11 +364,12 @@ static void on_driver_dev(const char *line)
         return;
     }
     remember_dev(&dev);
-    act = usbman_on_device(&g_session, &dev);
-    publish();
-    apply_action(act, &dev);
+    act = usbman_on_device(&g_session, &dev); /* policy thuần — không I/O */
+    publish();                                /* broadcast state + media_sync */
+    apply_action(act, &dev);                  /* AOA queue hoặc ip link up */
 }
 
+/* Parse reply GET_PROTOCOL (AOA req 51): 2 byte LE = số protocol hỗ trợ. */
 static int protocol_of(const char *line)
 {
     const char *hex = strstr(line, "ok ctrl ");
@@ -346,6 +385,11 @@ static int protocol_of(const char *line)
     return data[0] | (data[1] << 8);
 }
 
+/*
+ * Nhận ok/err khớp lệnh đầu queue.
+ * AOA err → fail session + drop các bước AOA còn lại.
+ * GET_PROTOCOL (req 51) ok nhưng protocol < 1 → phone không hỗ trợ AOA.
+ */
 static void finish_driver_reply(const char *line)
 {
     qitem head;
@@ -353,12 +397,12 @@ static void finish_driver_reply(const char *line)
     int err;
 
     if (!g_waiting || g_qn == 0) {
-        return;
+        return; /* không có lệnh đang chờ → bỏ qua (có thể là noise) */
     }
     ok = strncmp(line, "ok", 2) == 0 && (line[2] == '\0' || line[2] == ' ');
     err = strncmp(line, "err", 3) == 0 && (line[3] == '\0' || line[3] == ' ');
     if (!ok && !err) {
-        return;
+        return; /* chưa phải reply cuối (vd. dòng trung gian) */
     }
     head = g_q[g_qh];
     g_waiting = 0;
@@ -379,6 +423,10 @@ static void finish_driver_reply(const char *line)
     }
 }
 
+/*
+ * Gửi đúng một lệnh đầu queue xuống driver, rồi chờ ok/err.
+ * Trước AOA START (req 53): set pending_reenum — phone sẽ biến mất tạm thời.
+ */
 static void pump(void)
 {
     if (g_waiting || g_qn == 0 || g_driver.fd < 0) {
@@ -401,11 +449,13 @@ static void close_driver(void)
     g_driver.fd = -1;
     g_driver.len = 0;
     g_driver.sub = 0;
+    /* Queue vô nghĩa khi mất driver — xóa hết để tránh gửi nhầm khi reconnect. */
     g_waiting = 0;
     g_qh = 0;
     g_qn = 0;
 }
 
+/* Kết nối lazy tới usb-driverd; ngay sau đó enqueue "sub" để nhận snapshot + events. */
 static void try_connect_driver(void)
 {
     int fd;
@@ -414,7 +464,7 @@ static void try_connect_driver(void)
     }
     fd = hupi_connect_unix(g_driver_path);
     if (fd < 0) {
-        return;
+        return; /* driver chưa lên — thử lại vòng poll sau */
     }
     hupi_set_nonblock(fd);
     memset(&g_driver, 0, sizeof g_driver);
@@ -423,6 +473,7 @@ static void try_connect_driver(void)
     HUPI_LOGI("connected to usb-driverd");
 }
 
+/* Frame demo RGB (header 20 byte + pixel) khi media shim chưa kịp hoặc không có. */
 static void fill_frame(int carplay)
 {
     uint32_t w = HUPI_FRAME_W;
@@ -461,6 +512,12 @@ static void fill_frame(int carplay)
     }
 }
 
+/*
+ * Chuẩn bị frame để gửi:
+ *  1) poll media backend (có thể set g_media_ready)
+ *  2) cần có consumer stream + không đang gửi dở + session streaming
+ *  3) ưu tiên frame media; không thì RGB shim ~10 fps (100 ms)
+ */
 static void consider_frame(void)
 {
     uint32_t t;
@@ -480,13 +537,13 @@ static void consider_frame(void)
         g_frame_len = g_media_len;
         g_media_ready = 0;
         g_frame_off = 0;
-        g_frame_busy = 1;
+        g_frame_busy = 1; /* đánh dấu có dữ liệu chờ POLLOUT */
         g_last_frame_ms = now_ms();
         return;
     }
     t = now_ms();
     if (g_last_frame_ms && t - g_last_frame_ms < 100) {
-        return;
+        return; /* rate-limit shim */
     }
     g_last_frame_ms = t;
     g_tick++;
@@ -496,6 +553,7 @@ static void consider_frame(void)
     g_frame_busy = 1;
 }
 
+/* Gửi dần g_frame (non-blocking); xong một frame thì g_frame_busy=0. */
 static void drain_stream_write(void)
 {
     ssize_t n;
@@ -505,7 +563,7 @@ static void drain_stream_write(void)
     n = send(g_stream_fd, g_frame + g_frame_off, g_frame_len - g_frame_off, MSG_NOSIGNAL);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
-            return;
+            return; /* thử lại khi socket writable */
         }
         close(g_stream_fd);
         g_stream_fd = -1;
@@ -514,7 +572,7 @@ static void drain_stream_write(void)
     }
     g_frame_off += (size_t)n;
     if (g_frame_off >= g_frame_len) {
-        g_frame_busy = 0;
+        g_frame_busy = 0; /* sẵn sàng frame kế */
     }
 }
 
@@ -528,6 +586,10 @@ static void close_peer(int index)
     g_peers[index].sub = 0;
 }
 
+/*
+ * Lệnh trên usb-manager.sock:
+ *   sub | status | stream on/off | touch x y down | sim ... (proxy sang driver)
+ */
 static void handle_client(int index, const char *line)
 {
     int fd = g_peers[index].fd;
@@ -547,6 +609,7 @@ static void handle_client(int index, const char *line)
         return;
     }
     if (strncmp(line, "sim ", 4) == 0) {
+        /* Proxy nguyên dòng sang driver (sim plug/unplug...) qua queue. */
         if (g_driver.fd < 0 || enqueue(line, 0) != 0) {
             hupi_send_line(fd, "err driver");
             return;
@@ -555,6 +618,7 @@ static void handle_client(int index, const char *line)
         return;
     }
     if (strcmp(line, "stream on") == 0 || strcmp(line, "stream off") == 0) {
+        /* line[7..]="on"/"off" sau "stream " */
         usbman_set_stream(&g_session, line[7] == 'o' && line[8] == 'n');
         publish();
         hupi_send_line(fd, "ok");
@@ -566,6 +630,7 @@ static void handle_client(int index, const char *line)
             hupi_send_line(fd, "err touch");
             return;
         }
+        /* Lưu vào session (UI) + forward vào media backend nếu đang chạy. */
         usbman_touch(&g_session, x, y, down);
         if (g_aa) {
             hu_aa_touch(g_aa, x, y, down);
@@ -618,6 +683,7 @@ static void drain_driver(void)
             close_driver();
             break;
         }
+        /* Hai loại message từ driver: sự kiện thiết bị vs reply lệnh. */
         if (strncmp(line, "dev ", 4) == 0) {
             on_driver_dev(line);
         } else {
@@ -643,6 +709,7 @@ static void accept_client(void)
     close(fd);
 }
 
+/* Chỉ một consumer video — client mới thay thế client cũ. */
 static void accept_stream(void)
 {
     int fd = accept(g_stream_listen, NULL, NULL);
@@ -654,7 +721,7 @@ static void accept_stream(void)
         close(g_stream_fd);
     }
     g_stream_fd = fd;
-    g_frame_busy = 0;
+    g_frame_busy = 0; /* bắt đầu frame mới cho consumer mới */
 }
 
 static const char *runtime_arg(int argc, char **argv)
@@ -708,11 +775,13 @@ int main(int argc, char **argv)
     hupi_set_nonblock(g_stream_listen);
     HUPI_LOGI("listen manager=%s stream=%s", g_manager_path, g_stream_path);
 
+    /* map: -1 manager listen, -2 stream listen, -3 driver, -4 stream client, >=0 peer */
     while (!g_stop) {
         struct pollfd pfds[4 + MAX_PEER];
         int np = 0;
         int map[4 + MAX_PEER];
 
+        /* Trước poll: đảm bảo có driver, đẩy lệnh queue, chuẩn bị frame. */
         try_connect_driver();
         pump();
         consider_frame();
@@ -732,6 +801,7 @@ int main(int argc, char **argv)
             np++;
         }
         if (g_stream_fd >= 0) {
+            /* POLLOUT chỉ khi đang có frame dở — tránh wake liên tục. */
             pfds[np].fd = g_stream_fd;
             pfds[np].events = POLLIN | (g_frame_busy ? POLLOUT : 0);
             map[np] = -4;
@@ -769,6 +839,7 @@ int main(int argc, char **argv)
                 } else {
                     if (pfds[i].revents & POLLIN) {
                         char discard[64];
+                        /* Stream là one-way; đọc để phát hiện peer đóng (EOF). */
                         if (recv(g_stream_fd, discard, sizeof discard, 0) == 0) {
                             close(g_stream_fd);
                             g_stream_fd = -1;
@@ -783,7 +854,7 @@ int main(int argc, char **argv)
                 drain_client(map[i]);
             }
         }
-        pump();
+        pump(); /* reply vừa về có thể mở slot gửi lệnh kế */
     }
     unlink(g_manager_path);
     unlink(g_stream_path);

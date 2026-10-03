@@ -1,10 +1,10 @@
 /**
  * @file usbman.h
- * @brief USB manager session policy (one projection backend at a time).
+ * @brief Chính sách session USB manager (một backend projection tại một thời điểm).
  *
- * Android goes through AOA then libhu-aa (AASDK on board images).
- * Apple CarPlay requires CDC-NCM + IPv6 (never ipheth) then libhu-carplay.
- * Media codecs and IAP2/MFi live in those libraries, not here.
+ * Android: AOA → libhu-aa (AASDK trên image board).
+ * Apple CarPlay: bắt buộc CDC-NCM (không dùng ipheth) → libhu-carplay.
+ * Codec media / IAP2 / MFi nằm trong các thư viện đó, không ở đây.
  */
 #ifndef USBMAN_H
 #define USBMAN_H
@@ -15,21 +15,23 @@
 #define USBMAN_STR_LEN 96
 #define USBMAN_LINE_LEN 256
 
+/** Kết quả phân loại thiết bị cho policy. */
 typedef enum {
     USBMAN_KIND_OTHER = 0,
-    USBMAN_KIND_ANDROID,
-    USBMAN_KIND_ANDROID_AOAP,
-    USBMAN_KIND_CARPLAY,
-    USBMAN_KIND_APPLE_WAIT,
-    USBMAN_KIND_APPLE_IPHETH,
+    USBMAN_KIND_ANDROID,       /* Google/ADB — cần AOA */
+    USBMAN_KIND_ANDROID_AOAP,  /* đã vào accessory mode */
+    USBMAN_KIND_CARPLAY,       /* Apple + CDC-NCM */
+    USBMAN_KIND_APPLE_WAIT,    /* Apple, chưa có NCM */
+    USBMAN_KIND_APPLE_IPHETH,  /* Apple ipheth — bị từ chối */
     USBMAN_KIND_STORAGE,
     USBMAN_KIND_HID
 } usbman_kind_t;
 
+/** Hành động daemon cần làm sau usbman_on_device(). */
 typedef enum {
     USBMAN_ACT_NONE = 0,
-    USBMAN_ACT_AOA,
-    USBMAN_ACT_LINK_UP
+    USBMAN_ACT_AOA,      /* xếp hàng lệnh AOA xuống driver */
+    USBMAN_ACT_LINK_UP   /* `ip link set <net> up` cho NCM */
 } usbman_action_t;
 
 typedef struct {
@@ -52,19 +54,20 @@ typedef struct {
     int down;
 } usbman_touch_t;
 
+/** Trạng thái session hiện tại — serialize thành dòng `state ...`. */
 typedef struct {
-    char backend[16];
-    char phase[24];
+    char backend[16];          /* none | android | carplay */
+    char phase[24];            /* idle|aoa|reenumerating|active|failed|classified */
     char device[USBMAN_ID_LEN];
     char reason[USBMAN_STR_LEN];
-    char parked[USBMAN_ID_LEN];
+    char parked[USBMAN_ID_LEN]; /* máy projection bị giữ vì backend đang bận */
     char net[32];
-    int streaming;
-    int stream_user;
-    int pending_reenum;
+    int streaming;             /* có đẩy video không (sau khi kết hợp stream_user) */
+    int stream_user;           /* -1 auto, 0 tắt, 1 bật */
+    int pending_reenum;        /* 1 = vừa gửi AOA START, chờ phone plug lại */
     int touch_count;
     usbman_touch_t last_touch;
-    char other[USBMAN_ID_LEN];
+    char other[USBMAN_ID_LEN]; /* thiết bị không-projection gần nhất */
 } usbman_session_t;
 
 const char *usbman_kind_str(usbman_kind_t kind);

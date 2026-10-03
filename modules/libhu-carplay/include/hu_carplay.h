@@ -1,11 +1,10 @@
 /**
  * @file hu_carplay.h
- * @brief CarPlay media session over USB-NCM (IPv6) + IAP2/MFi boundary.
+ * @brief Session media CarPlay trên USB-NCM (IPv6) + biên giới IAP2/MFi.
  *
- * Matches the HUPI service diagram: phone <-> CDC-NCM <-> connectivity.
- * libiap2 / libhu-mfi supply authentication when present on the EVB image.
- * Video frames leave through the same callback style as libhu-aa so
- * hu-graphicsd (or the rasp4 demo cluster) can stay backend-agnostic.
+ * Sơ đồ HUPI: phone <-> CDC-NCM <-> connectivity.
+ * libiap2 / libhu-mfi xác thực khi có trên image EVB.
+ * Frame video dùng cùng kiểu callback như libhu-aa để graphics backend-agnostic.
  */
 #ifndef HU_CARPLAY_H
 #define HU_CARPLAY_H

@@ -1,11 +1,9 @@
 /**
  * @file hupi_log.h
- * @brief Process-wide tracing for HUPI USB modules.
+ * @brief Logger dùng chung các module USB HUPI (stderr + syslog).
  *
- * Every hotplug, session transition, AOA step, and media event should call
- * one of these macros so journald / systemd and the host sim show the same
- * trail. Levels map to syslog priorities when stderr is a tty they also print
- * with a short prefix.
+ * Mọi hotplug, chuyển session, bước AOA, sự kiện media nên gọi macro HUPI_LOG*
+ * để journald / host sim cùng một trail. Level map sang syslog; stderr in kèm prefix.
  */
 #ifndef HUPI_LOG_H
 #define HUPI_LOG_H

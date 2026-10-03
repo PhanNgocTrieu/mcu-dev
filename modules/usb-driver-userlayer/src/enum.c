@@ -1,3 +1,11 @@
+/**
+ * @file enum.c
+ * @brief Đọc /sys/bus/usb/devices và gom thông tin mỗi USB device.
+ *
+ * Chỉ lấy node có idVendor (bỏ hub/interface thuần). Gắn cờ class
+ * (NCM/ECM/RNDIS/ADB/...) từ bInterfaceClass + tên driver bound.
+ * Bỏ qua root hub Linux (vid 0x1d6b).
+ */
 #include "usbdrv.h"
 
 #include <dirent.h>
@@ -94,6 +102,7 @@ static int has_driver_name(const char *list, const char *name)
     return 0;
 }
 
+/* Ghi nhận một interface: cập nhật danh sách + cờ class cho classify phía usb-man. */
 static void note_iface(usbdrv_device_t *dev, unsigned cls, unsigned sub, unsigned proto,
                        const char *driver)
 {
@@ -105,19 +114,19 @@ static void note_iface(usbdrv_device_t *dev, unsigned cls, unsigned sub, unsigne
         append_token(dev->drivers, sizeof dev->drivers, driver);
     }
     if (cls == 0x02 && sub == 0x0d) {
-        dev->class_ncm = 1;
+        dev->class_ncm = 1; /* CDC-NCM — bắt buộc cho CarPlay path */
     }
     if (cls == 0x02 && sub == 0x06) {
-        dev->class_ecm = 1;
+        dev->class_ecm = 1; /* CDC-ECM */
     }
     if (cls == 0x0a || (cls == 0x02 && sub == 0x02)) {
-        /* CDC data / ACM is not enough to call it NCM. */
+        /* CDC data / ACM thôi chưa đủ để gọi là NCM. */
     }
     if ((cls == 0xe0 && sub == 0x01 && proto == 0x03) || (driver && strcmp(driver, "rndis_host") == 0)) {
         dev->class_rndis = 1;
     }
     if (driver && strcmp(driver, "ipheth") == 0) {
-        dev->class_ipheth = 1;
+        dev->class_ipheth = 1; /* Apple tether cũ — policy HUPI từ chối */
     }
     if (cls == 0x08 || (driver && strcmp(driver, "usb-storage") == 0)) {
         dev->class_storage = 1;
@@ -126,7 +135,7 @@ static void note_iface(usbdrv_device_t *dev, unsigned cls, unsigned sub, unsigne
         dev->class_hid = 1;
     }
     if (cls == 0xff && sub == 0x42 && proto == 0x01) {
-        dev->class_adb = 1;
+        dev->class_adb = 1; /* Android Debug Bridge */
     }
     if (driver && strcmp(driver, "cdc_ncm") == 0) {
         dev->class_ncm = 1;
@@ -178,6 +187,7 @@ static void find_net(const char *iface_path, char *out, size_t n)
     closedir(dir);
 }
 
+/* Đọc một device node sysfs (có idVendor) + duyệt các interface "bus-port:cfg.if". */
 static void read_device(const char *root, const char *name, usbdrv_device_t *dev)
 {
     char path[USBDRV_PATH_LEN];
@@ -201,9 +211,11 @@ static void read_device(const char *root, const char *name, usbdrv_device_t *dev
     read_dec(path, &dev->busnum);
     snprintf(path, sizeof path, "%s/devnum", dev->sys_path);
     read_dec(path, &dev->devnum);
+    /* usbfs path chuẩn theo busnum/devnum — dùng cho USBDEVFS_CONTROL. */
     if (dev->busnum > 0 && dev->devnum > 0) {
         snprintf(dev->devnode, sizeof dev->devnode, "/dev/bus/usb/%03d/%03d", dev->busnum, dev->devnum);
     }
+    /* Google AOAP đã vào accessory mode (trước/sau AOA START). */
     if (dev->vendor_id == 0x18d1 && (dev->product_id == 0x2d00 || dev->product_id == 0x2d01)) {
         dev->class_accessory = 1;
     }
@@ -218,6 +230,7 @@ static void read_device(const char *root, const char *name, usbdrv_device_t *dev
         char driver[USBDRV_NAME_LEN];
         uint16_t v;
 
+        /* Interface sysfs có dạng "1-1:1.0" — có dấu ':'. Bỏ qua file khác. */
         if (!strchr(de->d_name, ':')) {
             continue;
         }
@@ -234,9 +247,9 @@ static void read_device(const char *root, const char *name, usbdrv_device_t *dev
         if (read_hex16(path, &v) == 0) {
             proto = v;
         }
-        read_driver_name(iface, driver, sizeof driver);
+        read_driver_name(iface, driver, sizeof driver); /* symlink .../driver → tên module */
         note_iface(dev, cls, sub, proto, driver);
-        find_net(iface, dev->net_iface, sizeof dev->net_iface);
+        find_net(iface, dev->net_iface, sizeof dev->net_iface); /* net/usb0 nếu CDC */
     }
     closedir(dir);
 }
@@ -259,6 +272,7 @@ int usbdrv_enum_root(const char *sysfs_devices, usbdrv_device_t *out, size_t cap
         if (de->d_name[0] == '.') {
             continue;
         }
+        /* Có idVendor → đây là USB device (không phải interface/hub port trống). */
         snprintf(vendor, sizeof vendor, "%s/%s/idVendor", sysfs_devices, de->d_name);
         if (access(vendor, R_OK) != 0) {
             continue;
@@ -268,7 +282,7 @@ int usbdrv_enum_root(const char *sysfs_devices, usbdrv_device_t *out, size_t cap
         }
         read_device(sysfs_devices, de->d_name, &out[*count]);
         if (out[*count].vendor_id == 0x1d6b) {
-            continue;
+            continue; /* Linux root hub — bỏ qua */
         }
         (*count)++;
     }

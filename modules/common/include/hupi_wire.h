@@ -1,28 +1,33 @@
 #ifndef HUPI_WIRE_H
 #define HUPI_WIRE_H
 
-/*
- * Text protocol shared by usb-driverd, usb-managerd, and the demo apps.
- * One message is one line ending in '\n'. Fields are key=value, values
- * percent-encoded when they are not a plain token.
+/**
+ * @file hupi_wire.h
+ * @brief Giao thức text + Unix socket dùng chung usb-driverd / usb-managerd / demo.
+ *
+ * Một message = một dòng kết thúc '\\n', field `key=value`.
+ * Giá trị không phải token thuần → percent-encode; rỗng → "-".
+ *
+ * Frame video trên usb-stream.sock: header 20 byte (magic/w/h/stride/nbytes) + RGB.
  */
 
 #include <stddef.h>
 #include <stdint.h>
 
-#define HUPI_FRAME_MAGIC 0x314D5246u /* bytes F R M 1 */
+#define HUPI_FRAME_MAGIC 0x314D5246u /* little-endian bytes: 'F''R''M''1' */
 #define HUPI_FRAME_W 640
 #define HUPI_FRAME_H 360
 
-#define HUPI_DRIVER_SOCK "usb-driver.sock"
+#define HUPI_DRIVER_SOCK "usb-driver.sock"   /* dưới $HUPI_RUNTIME */
 #define HUPI_MANAGER_SOCK "usb-manager.sock"
 #define HUPI_STREAM_SOCK "usb-stream.sock"
 
+/** Peer đã kết nối: buffer nhận + cờ đã subscribe sự kiện. */
 typedef struct {
     int fd;
     char buf[2048];
     size_t len;
-    int sub;
+    int sub; /* 1 = đã gửi lệnh "sub", nhận broadcast */
 } hupi_peer_t;
 
 int hupi_mkdir_runtime(const char *dir);

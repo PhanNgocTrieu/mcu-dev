@@ -1,10 +1,9 @@
 /**
  * @file hu_aa.c
- * @brief Android Auto session: AASDK when enabled, otherwise a traced shim.
+ * @brief Session Android Auto: AASDK khi bật cờ, không thì shim có log đầy đủ.
  *
- * Real AASDK (f1xpl/aasdk) is linked when HUPI_WITH_AASDK=1. The shim keeps
- * the board image and demos able to exercise the stream socket and logs every
- * lifecycle edge so lab testing is never silent.
+ * AASDK thật (f1xpl/aasdk) link khi HUPI_WITH_AASDK=1. Shim vẫn emit frame RGB
+ * + log lifecycle để demo/lab chạy được khi chưa có tree AASDK.
  */
 #include "hu_aa.h"
 
@@ -97,6 +96,11 @@ int hu_aa_touch(hu_aa_session_t *s, int x, int y, int down)
     return 0;
 }
 
+/*
+ * Gọi mỗi vòng poll của usb-managerd.
+ * Có AASDK: lấy H.264 AU từ messenger rồi on_video(..., is_h264=1).
+ * Không: tạo frame RGB shim ~10 fps (header FRM1 + pixel) để demo UI vẫn chạy.
+ */
 void hu_aa_poll(hu_aa_session_t *s)
 {
     uint8_t frame[20 + HUPI_FRAME_W * HUPI_FRAME_H * 3];
@@ -108,13 +112,14 @@ void hu_aa_poll(hu_aa_session_t *s)
     }
     now = mono_ms();
     if (s->last_ms && now - s->last_ms < 100) {
-        return;
+        return; /* ~10 fps */
     }
     s->last_ms = now;
     s->tick++;
 #if HUPI_WITH_AASDK
     /* Real path: pull H.264 AUs from aasdk::messenger and forward them. */
 #endif
+    /* Header little-endian: magic, w, h, stride, nbytes — khớp hupi_wire / cluster. */
     frame[0] = (uint8_t)HUPI_FRAME_MAGIC;
     frame[1] = (uint8_t)(HUPI_FRAME_MAGIC >> 8);
     frame[2] = (uint8_t)(HUPI_FRAME_MAGIC >> 16);
@@ -125,6 +130,7 @@ void hu_aa_poll(hu_aa_session_t *s)
     {
         uint32_t nbytes = stride * h;
         memcpy(frame + 16, &nbytes, 4);
+        /* RGB xanh lá sọc — nhận biết backend Android trên demo. */
         for (uint32_t y = 0; y < h; y++) {
             for (uint32_t x = 0; x < w; x++) {
                 uint8_t *p = frame + 20 + y * stride + x * 3;

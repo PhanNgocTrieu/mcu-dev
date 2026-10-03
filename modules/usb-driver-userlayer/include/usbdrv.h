@@ -1,11 +1,10 @@
 /**
  * @file usbdrv.h
- * @brief USB driver userlayer — boundary against the Linux USB host stack.
+ * @brief USB driver userlayer — biên giới với USB host stack của Linux.
  *
- * This module does not replace usbcore. It reads what the kernel already
- * enumerated (sysfs, uevent) and performs usbfs control transfers so that
- * @c usb-man can run AOA / claim a device without opening /dev/bus/usb itself
- * from multiple processes.
+ * Không thay usbcore. Đọc những gì kernel đã enumerate (sysfs, uevent) và
+ * thực hiện control transfer qua usbfs để @c usb-man chạy AOA / claim thiết bị
+ * mà không để nhiều process cùng mở /dev/bus/usb.
  */
 #ifndef USBDRV_H
 #define USBDRV_H

@@ -1,11 +1,10 @@
 /**
  * @file hu_aa.h
- * @brief Android Auto media session boundary (AASDK-backed on board images).
+ * @brief Biên giới session media Android Auto (AASDK trên image board).
  *
- * usb-man owns device lifecycle. This library owns the AA protocol session:
- * video source frames, input sink, and start/stop. When built with
- * HUPI_WITH_AASDK the implementation talks the real AASDK stack; otherwise a
- * transport shim still emits frames so the graphics path stays wired.
+ * usb-man sở hữu lifecycle thiết bị. Thư viện này sở hữu session AA:
+ * nguồn video, sink input, start/stop. Có HUPI_WITH_AASDK → stack thật;
+ * không thì shim vẫn emit frame để giữ đường graphics.
  */
 #ifndef HU_AA_H
 #define HU_AA_H

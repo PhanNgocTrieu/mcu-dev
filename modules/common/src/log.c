@@ -1,6 +1,6 @@
 /**
  * @file log.c
- * @brief Timestamped, tagged logger to stderr and syslog.
+ * @brief Logger có timestamp + tag ra stderr và syslog.
  */
 #include "hupi_log.h"
 

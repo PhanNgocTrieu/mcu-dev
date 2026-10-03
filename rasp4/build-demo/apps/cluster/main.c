@@ -1,3 +1,7 @@
+/**
+ * @file cluster/main.c
+ * @brief Demo cluster: hiển thị state session + nhận frame từ usb-stream.sock.
+ */
 #include "ui.h"
 
 #include "hupi_wire.h"

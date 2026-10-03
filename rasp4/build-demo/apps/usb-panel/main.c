@@ -1,3 +1,7 @@
+/**
+ * @file usb-panel/main.c
+ * @brief Demo UI điều khiển: gửi lệnh sim/stream tới usb-managerd.
+ */
 #include "ui.h"
 
 #include "hupi_wire.h"

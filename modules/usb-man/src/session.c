@@ -1,3 +1,14 @@
+/**
+ * @file session.c
+ * @brief Máy trạng thái session projection (một backend tại một thời điểm).
+ *
+ * Phase chính:
+ *   idle → aoa → reenumerating → active   (Android: ADB → AOA START → AOAP)
+ *   idle → classified/active              (Apple: chờ NCM → CarPlay)
+ *   * → failed                            (AOA lỗi, ipheth bị chặn, ...)
+ *
+ * stream_user: -1 = mặc định (auto khi active), 0 = user tắt, 1 = user bật.
+ */
 #include "usbman.h"
 
 #include "hupi_wire.h"
@@ -5,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Thiết bị đủ điều kiện tranh session projection (không phải storage/HID thường). */
 static int projection(usbman_kind_t kind)
 {
     return kind == USBMAN_KIND_ANDROID || kind == USBMAN_KIND_ANDROID_AOAP ||
@@ -12,6 +24,7 @@ static int projection(usbman_kind_t kind)
            kind == USBMAN_KIND_APPLE_IPHETH;
 }
 
+/* Reset về trạng thái không có projection; stream_user về auto (-1). */
 static void set_idle(usbman_session_t *s)
 {
     snprintf(s->backend, sizeof s->backend, "none");
@@ -24,6 +37,12 @@ static void set_idle(usbman_session_t *s)
     s->stream_user = -1;
 }
 
+/*
+ * Có đẩy video không?
+ *  - chỉ khi phase == active
+ *  - stream_user == 0 → user tắt tường minh
+ *  - stream_user == -1 hoặc 1 → cho phép (auto / bật)
+ */
 static int streaming_now(const usbman_session_t *s)
 {
     if (strcmp(s->phase, "active") != 0) {
@@ -43,12 +62,13 @@ static void refresh_stream(usbman_session_t *s)
 void usbman_session_init(usbman_session_t *s)
 {
     memset(s, 0, sizeof *s);
-    s->stream_user = -1;
+    s->stream_user = -1; /* auto: stream khi active */
     snprintf(s->parked, sizeof s->parked, "-");
     snprintf(s->other, sizeof s->other, "-");
     set_idle(s);
 }
 
+/* Gán backend/phase/device/net; nếu máy này từng parked thì xóa parked. */
 static void adopt(usbman_session_t *s, const usbman_dev_t *dev, const char *backend, const char *phase,
                   const char *reason)
 {
@@ -63,17 +83,23 @@ static void adopt(usbman_session_t *s, const usbman_dev_t *dev, const char *back
     refresh_stream(s);
 }
 
+/**
+ * Thiết bị xuất hiện/đổi: cập nhật session và trả action cho daemon thực thi.
+ * @return USBMAN_ACT_AOA (chạy AOA), USBMAN_ACT_LINK_UP (ip link set up), hoặc NONE.
+ */
 usbman_action_t usbman_on_device(usbman_session_t *s, const usbman_dev_t *dev)
 {
     usbman_kind_t kind = usbman_classify(dev);
     int same;
 
     if (!projection(kind)) {
+        /* Lưu id thiết bị "khác" để UI/debug; không chiếm backend. */
         snprintf(s->other, sizeof s->other, "%s", dev->id);
         return USBMAN_ACT_NONE;
     }
 
     same = s->device[0] && strcmp(s->device, dev->id) == 0;
+    /* Đã có session đang chạy → park máy mới, không preempt. */
     if (!same && strcmp(s->backend, "none") != 0 && strcmp(s->phase, "idle") != 0 &&
         strcmp(s->phase, "failed") != 0) {
         snprintf(s->parked, sizeof s->parked, "%s", dev->id);
@@ -82,6 +108,7 @@ usbman_action_t usbman_on_device(usbman_session_t *s, const usbman_dev_t *dev)
     }
 
     if (kind == USBMAN_KIND_ANDROID_AOAP) {
+        /* Phone đã vào accessory mode → sẵn sàng media AA. */
         adopt(s, dev, "android", "active", "aoap");
         s->pending_reenum = 0;
         refresh_stream(s);
@@ -89,13 +116,14 @@ usbman_action_t usbman_on_device(usbman_session_t *s, const usbman_dev_t *dev)
     }
     if (kind == USBMAN_KIND_ANDROID) {
         if (same && strcmp(s->phase, "aoa") == 0) {
-            return USBMAN_ACT_NONE;
+            return USBMAN_ACT_NONE; /* đang chạy AOA, tránh lặp */
         }
         adopt(s, dev, "android", "aoa", "aoa-switch");
         return USBMAN_ACT_AOA;
     }
     if (kind == USBMAN_KIND_CARPLAY) {
         if (same && strcmp(s->phase, "active") == 0) {
+            /* Cập nhật tên iface nếu kernel đổi; sim không cần `ip link`. */
             snprintf(s->net, sizeof s->net, "%s", dev->net[0] ? dev->net : "-");
             return dev->sim ? USBMAN_ACT_NONE : USBMAN_ACT_LINK_UP;
         }
@@ -103,10 +131,12 @@ usbman_action_t usbman_on_device(usbman_session_t *s, const usbman_dev_t *dev)
         return dev->sim ? USBMAN_ACT_NONE : USBMAN_ACT_LINK_UP;
     }
     if (kind == USBMAN_KIND_APPLE_WAIT) {
+        /* Apple đã thấy nhưng chưa có CDC-NCM — chờ kernel/driver. */
         adopt(s, dev, "carplay", "classified", "waiting-ncm");
         return USBMAN_ACT_NONE;
     }
     if (kind == USBMAN_KIND_APPLE_IPHETH) {
+        /* Chính sách HUPI: không dùng ipheth; bắt buộc NCM. */
         adopt(s, dev, "carplay", "failed", "ipheth-disabled");
         return USBMAN_ACT_NONE;
     }
@@ -127,6 +157,7 @@ void usbman_on_gone(usbman_session_t *s, const char *id)
     if (strcmp(s->device, id) != 0) {
         return;
     }
+    /* AOA START khiến phone biến mất tạm thời — không về idle ngay. */
     if (s->pending_reenum) {
         snprintf(s->phase, sizeof s->phase, "reenumerating");
         snprintf(s->reason, sizeof s->reason, "aoa-reenum");
@@ -149,6 +180,7 @@ void usbman_fail(usbman_session_t *s, const char *reason)
     s->streaming = 0;
 }
 
+/* Tọa độ chuẩn hóa 0..10000 (UI map từ pixel); tăng touch_count cho debug. */
 void usbman_touch(usbman_session_t *s, int x, int y, int down)
 {
     if (x < 0) {
@@ -171,6 +203,7 @@ void usbman_touch(usbman_session_t *s, int x, int y, int down)
     }
 }
 
+/* User bật/tắt stream tường minh (1/0); khác -1 (auto). */
 int usbman_set_stream(usbman_session_t *s, int on)
 {
     s->stream_user = on ? 1 : 0;
@@ -178,6 +211,7 @@ int usbman_set_stream(usbman_session_t *s, int on)
     return s->streaming;
 }
 
+/* Serialize session → một dòng wire cho client/UI. Field escape để an toàn space. */
 void usbman_state_line(const usbman_session_t *s, char *out, size_t n)
 {
     char reason[USBMAN_STR_LEN * 3];
