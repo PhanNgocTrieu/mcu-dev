@@ -61,7 +61,11 @@ journalctl -u usb-driverd -u usb-managerd -f
 
 ```sh
 ./rasp4/build-raspi4/build-image.sh
+./rasp4/build-raspi4/publish-image.sh   # → images/pi4/ (~90MB nén, có thể commit)
+./rasp4/build-raspi4/flash-sd.sh /dev/sdX
 ```
+
+Yocto tmp/downloads **không** đưa vào git (hàng chục GB). Chi tiết: [images/README.md](../images/README.md).
 
 Cờ media trên Yocto: xem `docs/NEEDED.md` (`EXTRA_OECMAKE:pn-libhu-aa=…`).
 

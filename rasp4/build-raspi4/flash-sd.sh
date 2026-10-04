@@ -9,10 +9,22 @@ fi
 
 disk=$1
 root=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-image=$(ls -1t "$root"/build/tmp/deploy/images/raspberrypi4-64/rpi4-usb-image-raspberrypi4-64.rootfs.wic.bz2 2>/dev/null | head -n 1 || true)
+repo=$(CDPATH= cd -- "$root/../.." && pwd)
+image=""
 
-if [ -z "$image" ]; then
-    echo "image not found. Build it with: ./build-image.sh" >&2
+# 1) Image đã publish vào repo (nhẹ, dễ share qua git)
+if [ -L "$repo/images/pi4/latest.wic.bz2" ] || [ -f "$repo/images/pi4/latest.wic.bz2" ]; then
+    image=$(readlink -f "$repo/images/pi4/latest.wic.bz2" 2>/dev/null || echo "$repo/images/pi4/latest.wic.bz2")
+fi
+# 2) Deploy Yocto local (sau build-image.sh)
+if [ -z "$image" ] || [ ! -f "$image" ]; then
+    image=$(ls -1t "$root"/build/tmp/deploy/images/raspberrypi4-64/rpi4-usb-image-raspberrypi4-64.rootfs.wic.bz2 2>/dev/null | head -n 1 || true)
+fi
+
+if [ -z "$image" ] || [ ! -f "$image" ]; then
+    echo "image not found." >&2
+    echo "  build:  $root/build-image.sh" >&2
+    echo "  publish to repo: $root/publish-image.sh" >&2
     exit 1
 fi
 
