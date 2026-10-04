@@ -11,8 +11,11 @@ Same `modules/` as `meter-pf`, two entry points:
 
 ```sh
 ./build-raspi4/build-image.sh
+./build-raspi4/publish-image.sh   # copy ~90MB .wic.bz2 → images/pi4/ (có thể commit)
 ./build-raspi4/flash-sd.sh /dev/sdX
 ```
+
+Cây Yocto (`build/`, `downloads/`) rất nặng (hàng chục GB) — **không** commit. Chỉ artifact flash trong [../images/](../images/README.md).
 
 ## Virtual monitors
 

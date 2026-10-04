@@ -57,3 +57,10 @@ __pycache__/
 # Runtime sockets / smoke logs
 /tmp/hupi-*/
 *.sock
+
+# Flash images: chỉ track dưới images/ (không track artifact rải trong Yocto tmp)
+**/*.wic
+**/*.wic.bz2
+**/*.wic.bmap
+!images/**/*.wic.bz2
+!images/**/*.wic.bmap
